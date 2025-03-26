@@ -1,0 +1,23 @@
+{
+  "name": "backend",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "db:gen": "bun drizzle-kit generate --config=drizzle.config.ts",
+    "db:push": "bun drizzle-kit push --config=drizzle.config.ts",
+    "db:studio": "bun drizzle-kit studio",
+    "db:viz": "bun run drizzle-lab visualizer"
+  },
+  "dependencies": {
+    "better-auth": "^1.2.4",
+    "drizzle-lab": "^0.11.0",
+    "drizzle-orm": "^0.41.0",
+    "googleapis": "^148.0.0",
+    "hono": "^4.7.5",
+    "pg": "^8.14.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.30.5",
+    "visualizer": "^3.1.0"
+  }
+}

@@ -1,0 +1,8 @@
+# deps
+node_modules/
+
+# Env
+.env
+
+# Lock files
+*lock*
