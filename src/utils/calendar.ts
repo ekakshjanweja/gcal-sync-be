@@ -28,59 +28,18 @@ export async function fetchCalenderEvent(accessToken: string) {
 
     const events = response.data.items || [];
 
-    return events;
+    return { events, nextPageToken: response.data.nextPageToken };
   } catch (error) {
     console.error("Error fetching calendar events:", error);
     throw new Error("Failed to fetch calendar events");
   }
 }
 
-export async function syncCalendar(sync: CalendarSyncSelect) {
-  const { id, sourceAccountId, targetAccountId, syncToken } = sync;
+export async function createCalendarInstance(accessToken: string) {
+  const source = new google.auth.OAuth2();
+  source.setCredentials({ access_token: accessToken });
 
-  const sourceAccount = await db
-    .select()
-    .from(account)
-    .where(eq(account.id, sourceAccountId))
-    .limit(1)
-    .then((res) => res[0]);
+  const calendar = await google.calendar({ version: "v3", auth: source });
 
-  const targetAccount = await db
-    .select()
-    .from(account)
-    .where(eq(account.id, targetAccountId))
-    .limit(1)
-    .then((res) => res[0]);
-
-  const sourceAccessToken = sourceAccount.accessToken;
-  const targetAccessToken = targetAccount.accessToken;
-
-  const authSource = new google.auth.OAuth2();
-  authSource.setCredentials({ access_token: sourceAccessToken });
-
-  const authTarget = new google.auth.OAuth2();
-  authTarget.setCredentials({ access_token: targetAccessToken });
-
-  const calendarSource = google.calendar({ version: "v3", auth: authSource });
-  const calendarTarget = google.calendar({ version: "v3", auth: authTarget });
-
-  if (!sourceAccessToken || !targetAccessToken) {
-    console.log("Access token not found");
-    return;
-  }
-
-  const sourceEvents = await fetchCalenderEvent(sourceAccessToken);
-  const targetEvents = await fetchCalenderEvent(targetAccessToken);
-
-  for (const event of targetEvents) {
-    await calendarSource.events.insert({
-      calendarId: "primary",
-      requestBody: event,
-    });
-  }
-
-  // await db
-  //   .update(calendarSyncs)
-  //   .set({ syncToken: res.data.nextSyncToken, lastSyncedAt: new Date() })
-  //   .where(eq(calendarSyncs.id, id));
+  return calendar;
 }

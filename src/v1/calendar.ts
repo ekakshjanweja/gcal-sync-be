@@ -8,46 +8,96 @@ import {
   calendarSyncs,
   CalendarSyncSelect,
 } from "../services/db/schema/calender-sync";
-import { syncCalendar } from "../utils/calendar";
+import { createCalendarInstance, fetchCalenderEvent } from "../utils/calendar";
 
 export const calendarRouter = new Hono<{
   Variables: AppVariables;
 }>();
 
-calendarRouter.get("/sessions", async (c) => {
-  const user = await c.get("user");
+calendarRouter.post("/sync", async (c) => {
+  try {
+    const body = await c.req.json();
 
-  if (!user) {
+    const {
+      id,
+      lastSyncedAt,
+      sourceAccountId,
+      syncToken,
+      targetAccountId,
+      userId,
+    } = body as CalendarSyncSelect;
+
+    const sourceAccount = await db
+      .select()
+      .from(account)
+      .where(eq(account.id, sourceAccountId))
+      .limit(1)
+      .then((res) => res[0]);
+
+    const targetAccount = await db
+      .select()
+      .from(account)
+      .where(eq(account.id, targetAccountId))
+      .limit(1)
+      .then((res) => res[0]);
+
+    if (!sourceAccount || !targetAccount) {
+      return c.json(
+        errorResponse({
+          error: ERROR_TYPE.NOT_FOUND,
+          message: "Source or target account not found",
+        }),
+        404
+      );
+    }
+
+    const sourceAccessToken = sourceAccount.accessToken;
+    const targetAccessToken = targetAccount.accessToken;
+
+    if (!sourceAccessToken || !targetAccessToken) {
+      return c.json(
+        errorResponse({
+          error: ERROR_TYPE.UNKNOWN_ERROR,
+          message: "Source or target account is missing access token",
+        }),
+        400
+      );
+    }
+
+    const sourceCalendar = await createCalendarInstance(sourceAccessToken);
+    const targetCalendar = await createCalendarInstance(targetAccessToken);
+
+    const { events, nextPageToken } = await fetchCalenderEvent(
+      targetAccessToken
+    );
+
+    for (const event of events) {
+      await sourceCalendar.events.insert({
+        calendarId: "primary",
+        requestBody: event,
+      });
+    }
+
+    await db
+      .update(calendarSyncs)
+      .set({ syncToken: nextPageToken, lastSyncedAt: new Date() })
+      .where(eq(calendarSyncs.id, id));
+
+    return c.json(
+      successResponse({
+        message: "Sync completed successfully",
+      }),
+      200
+    );
+  } catch (error) {
     return c.json(
       errorResponse({
-        error: ERROR_TYPE.UNAUTHORIZED,
+        error: ERROR_TYPE.INTERNAL_SERVER_ERROR,
+        message: `${error}`,
       }),
-      401
+      500
     );
   }
-
-  const sessions = await db
-    .select()
-    .from(session)
-    .where(
-      eq(session.userId, user.id) &&
-        eq(session.expiresAt, new Date(Date.now() + 1000))
-    )
-    .then((res) => res);
-
-  return c.json(successResponse({ sessions }), 200);
-});
-
-calendarRouter.post("/sync", async (c) => {
-  const body = await c.req.json();
-  await syncCalendar(body as CalendarSyncSelect);
-
-  return c.json(
-    successResponse({
-      message: "Sync completed successfully",
-    }),
-    200
-  );
 });
 
 calendarRouter.post("/initiate-sync", async (c) => {
@@ -79,7 +129,6 @@ calendarRouter.post("/initiate-sync", async (c) => {
   const sourceUserId = sourceSession.userId;
   const targetUserId = targetSession.userId;
 
-  // Find source and target accounts based on the user IDs
   const sourceAccount = await db
     .select()
     .from(account)
@@ -114,6 +163,26 @@ calendarRouter.post("/initiate-sync", async (c) => {
         message: "Source and target accounts must be different",
       }),
       400
+    );
+  }
+
+  const exsitingSync = await db
+    .select()
+    .from(calendarSyncs)
+    .where(
+      eq(calendarSyncs.sourceAccountId, sourceAccountId) &&
+        eq(calendarSyncs.targetAccountId, targetAccountId)
+    )
+    .limit(1)
+    .then((res) => res[0]);
+
+  if (exsitingSync) {
+    return c.json(
+      successResponse({
+        sync: exsitingSync,
+        message: "Sync relationship already exisits",
+      }),
+      200
     );
   }
 
