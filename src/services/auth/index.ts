@@ -12,6 +12,7 @@ export const auth = betterAuth({
     google: {
       clientId: GOOGLE_CLIENT_ID!,
       clientSecret: GOOGLE_CLIENT_SECRET!,
+      scope: ["https://www.googleapis.com/auth/calendar"],
     },
   },
   plugins: [

@@ -41,6 +41,7 @@ calendarRouter.get("/sessions", async (c) => {
 calendarRouter.post("/sync", async (c) => {
   const body = await c.req.json();
   await syncCalendar(body as CalendarSyncSelect);
+
   return c.json(
     successResponse({
       message: "Sync completed successfully",
